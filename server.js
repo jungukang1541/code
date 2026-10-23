@@ -115,19 +115,21 @@ async function findCodeInAccount(account, id) {
     const lock = await client.getMailboxLock('INBOX');
     try {
       const since = new Date(Date.now() - LOOKBACK_MINUTES * 60_000);
-      const uids = await client.search({ since }, { uid: true });
+      const targetAddress = `${id.toLowerCase()}@${account.domain.toLowerCase()}`;
+
+      // IMAP 서버에 To 헤더로 바로 필터링을 맡겨서, 메일을 일일이 열어보지 않게 함
+      const uids = await client.search({ since, header: { to: targetAddress } }, { uid: true });
       if (!uids || uids.length === 0) return null;
 
-      const recentUids = uids.slice(-50).reverse();
-      const targetAddress = `${id.toLowerCase()}@${account.domain.toLowerCase()}`;
+      const recentUids = uids.slice(-10).reverse();
 
       for (const uid of recentUids) {
         const msg = await client.fetchOne(uid, { envelope: true, source: true }, { uid: true });
         if (!msg) continue;
 
+        // header 검색은 부분일치라, 정확히 일치하는지 한번 더 확인
         const toList = (msg.envelope?.to || []).map((t) => (t.address || '').toLowerCase());
-        const matches = toList.some((addr) => addr === targetAddress);
-        if (!matches) continue;
+        if (!toList.includes(targetAddress)) continue;
 
         const parsed = await simpleParser(msg.source);
         const code = extractCode(parsed.text, parsed.html);
@@ -145,11 +147,10 @@ async function findCodeInAccount(account, id) {
 }
 
 async function findCodeForId(id) {
-  for (const account of ACCOUNTS) {
-    const result = await findCodeInAccount(account, id);
-    if (result) return result;
-  }
-  return null;
+  const results = await Promise.all(
+    ACCOUNTS.map((account) => findCodeInAccount(account, id).catch(() => null))
+  );
+  return results.find((result) => result) || null;
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
