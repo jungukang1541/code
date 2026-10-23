@@ -56,7 +56,22 @@ function rateLimited(ip) {
   return entry.count > 30;
 }
 
-function extractCode(text) {
+function htmlToText(html) {
+  if (!html) return '';
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&shy;/gi, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&#\d+;/g, '')
+    .replace(/&[a-z]+;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractCode(rawText, html) {
+  const text = rawText || htmlToText(html);
   if (!text) return null;
   const labeled = text.match(/(?:인증\s*(?:번호|코드)|확인\s*코드|verification\s*code|security\s*code|otp)[^0-9A-Za-z]{0,10}([A-Z0-9]{4,8})/i);
   if (labeled) return labeled[1];
@@ -115,7 +130,7 @@ async function findCodeInAccount(account, id) {
         if (!matches) continue;
 
         const parsed = await simpleParser(msg.source);
-        const code = extractCode(parsed.text || parsed.html || '');
+        const code = extractCode(parsed.text, parsed.html);
         if (code) {
           return { code, subject: parsed.subject || '', date: parsed.date };
         }
