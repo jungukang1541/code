@@ -61,6 +61,18 @@ function extractCode(text) {
   const labeled = text.match(/(?:인증\s*(?:번호|코드)|확인\s*코드|verification\s*code|security\s*code|otp)[^0-9A-Za-z]{0,10}([A-Z0-9]{4,8})/i);
   if (labeled) return labeled[1];
 
+  const codeAfterPhrase = text.match(/코드를\s*입력하고\s*로그인하세요[^0-9]{0,15}(\d{4,6})/);
+  if (codeAfterPhrase) return codeAfterPhrase[1];
+
+  const codeBeforePhrase = text.match(/(\d{4,6})[^0-9]{0,15}(?:에\s*로그인하려면|로그인하려면\s*디바이스에\s*위\s*코드를\s*입력)/);
+  if (codeBeforePhrase) return codeBeforePhrase[1];
+
+  const enterCodeBelow = text.match(/(?:enter\s*the\s*code\s*below|use\s*the\s*code\s*below)[^0-9A-Za-z]{0,15}(\d{4,6})/i);
+  if (enterCodeBelow) return enterCodeBelow[1];
+
+  const enterCodeOnDevice = text.match(/(\d{4,6})[^0-9]{0,15}enter\s*(?:the|this)\s*code\s*on\s*(?:your|the)\s*device/i);
+  if (enterCodeOnDevice) return enterCodeOnDevice[1];
+
   const sixDigit = text.match(/\b\d{6}\b/);
   if (sixDigit) return sixDigit[0];
 
