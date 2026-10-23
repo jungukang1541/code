@@ -7,15 +7,37 @@ const { simpleParser } = require('mailparser');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const MAIL_HOST = process.env.MAIL_HOST || 'imap.gmail.com';
-const MAIL_PORT = Number(process.env.MAIL_PORT || 993);
-const MAIL_USER = process.env.MAIL_USER;
-const MAIL_PASS = process.env.MAIL_PASS;
-const DOMAIN = process.env.DOMAIN;
 const LOOKBACK_MINUTES = Number(process.env.LOOKBACK_MINUTES || 15);
 
-if (!MAIL_USER || !MAIL_PASS || !DOMAIN) {
-  console.error('MAIL_USER, MAIL_PASS, DOMAIN 환경변수를 .env 에 설정해주세요.');
+function loadAccounts() {
+  const accounts = [];
+  let i = 1;
+  while (process.env[`MAIL_USER_${i}`]) {
+    accounts.push({
+      host: process.env[`MAIL_HOST_${i}`] || 'imap.gmail.com',
+      port: Number(process.env[`MAIL_PORT_${i}`] || 993),
+      user: process.env[`MAIL_USER_${i}`],
+      pass: process.env[`MAIL_PASS_${i}`],
+      domain: process.env[`DOMAIN_${i}`],
+    });
+    i += 1;
+  }
+  if (accounts.length === 0 && process.env.MAIL_USER) {
+    accounts.push({
+      host: process.env.MAIL_HOST || 'imap.gmail.com',
+      port: Number(process.env.MAIL_PORT || 993),
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+      domain: process.env.DOMAIN,
+    });
+  }
+  return accounts;
+}
+
+const ACCOUNTS = loadAccounts();
+
+if (ACCOUNTS.length === 0 || ACCOUNTS.some((a) => !a.user || !a.pass || !a.domain)) {
+  console.error('메일 계정 환경변수가 올바르지 않습니다. MAIL_USER_1/MAIL_PASS_1/DOMAIN_1 (또는 레거시 MAIL_USER/MAIL_PASS/DOMAIN)을 .env 에 설정해주세요.');
   process.exit(1);
 }
 
@@ -52,12 +74,12 @@ function isValidId(id) {
   return typeof id === 'string' && /^[a-zA-Z0-9._-]{1,64}$/.test(id);
 }
 
-async function findCodeForId(id) {
+async function findCodeInAccount(account, id) {
   const client = new ImapFlow({
-    host: MAIL_HOST,
-    port: MAIL_PORT,
+    host: account.host,
+    port: account.port,
     secure: true,
-    auth: { user: MAIL_USER, pass: MAIL_PASS },
+    auth: { user: account.user, pass: account.pass },
     logger: false,
   });
 
@@ -70,7 +92,7 @@ async function findCodeForId(id) {
       if (!uids || uids.length === 0) return null;
 
       const recentUids = uids.slice(-50).reverse();
-      const targetAddress = `${id.toLowerCase()}@${DOMAIN.toLowerCase()}`;
+      const targetAddress = `${id.toLowerCase()}@${account.domain.toLowerCase()}`;
 
       for (const uid of recentUids) {
         const msg = await client.fetchOne(uid, { envelope: true, source: true }, { uid: true });
@@ -93,6 +115,14 @@ async function findCodeForId(id) {
   } finally {
     await client.logout();
   }
+}
+
+async function findCodeForId(id) {
+  for (const account of ACCOUNTS) {
+    const result = await findCodeInAccount(account, id);
+    if (result) return result;
+  }
+  return null;
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
