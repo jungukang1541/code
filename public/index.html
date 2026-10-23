@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>코드 확인</title>
+<style>
+  :root {
+    color-scheme: light dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #0f1115;
+    color: #f2f2f2;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    padding: 40px 32px;
+    background: #171a21;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    text-align: center;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 24px;
+    font-weight: 600;
+  }
+  .code-box {
+    min-height: 80px;
+    border: 2px dashed #3a3f4b;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    margin-bottom: 20px;
+    padding: 12px;
+    word-break: break-all;
+    color: #4ade80;
+  }
+  .code-box.empty {
+    color: #777;
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  .code-box.error {
+    color: #f87171;
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  form {
+    display: flex;
+    gap: 8px;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #3a3f4b;
+    background: #0f1115;
+    color: #f2f2f2;
+    font-size: 15px;
+  }
+  input[type="text"]:focus {
+    outline: none;
+    border-color: #4ade80;
+  }
+  button {
+    padding: 12px 18px;
+    border-radius: 10px;
+    border: none;
+    background: #4ade80;
+    color: #0f1115;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .hint {
+    margin-top: 14px;
+    font-size: 12px;
+    color: #777;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>ID로 수신 코드 확인</h1>
+    <div id="codeBox" class="code-box empty">ID를 입력하면 여기에 코드가 표시됩니다</div>
+    <form id="form">
+      <input type="text" id="idInput" placeholder="예: rkdwnsrn1" autocomplete="off" />
+      <button type="submit" id="submitBtn">확인</button>
+    </form>
+    <div class="hint" id="hint"></div>
+  </div>
+
+<script>
+  const form = document.getElementById('form');
+  const idInput = document.getElementById('idInput');
+  const codeBox = document.getElementById('codeBox');
+  const submitBtn = document.getElementById('submitBtn');
+  const hint = document.getElementById('hint');
+
+  let pollTimer = null;
+
+  function setBox(text, cls) {
+    codeBox.textContent = text;
+    codeBox.className = 'code-box' + (cls ? ' ' + cls : '');
+  }
+
+  async function checkCode(id) {
+    try {
+      const res = await fetch('/api/code?id=' + encodeURIComponent(id));
+      const data = await res.json();
+      if (res.ok) {
+        setBox(data.code, '');
+        hint.textContent = data.subject ? ('제목: ' + data.subject) : '';
+        return true;
+      }
+      if (res.status === 404) {
+        setBox('아직 도착한 메일이 없습니다. 잠시만 기다려주세요...', 'empty');
+        return false;
+      }
+      setBox(data.error || '오류가 발생했습니다.', 'error');
+      return true; // stop polling on non-404 errors
+    } catch (err) {
+      setBox('서버에 연결할 수 없습니다.', 'error');
+      return true;
+    }
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = idInput.value.trim();
+    if (!id) return;
+
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+
+    submitBtn.disabled = true;
+    hint.textContent = '';
+    setBox('조회 중...', 'empty');
+
+    let attempts = 0;
+    const maxAttempts = 20; // 최대 약 60초 동안 재시도
+
+    const tryOnce = async () => {
+      attempts += 1;
+      const done = await checkCode(id);
+      if (done || attempts >= maxAttempts) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        submitBtn.disabled = false;
+      }
+    };
+
+    await tryOnce();
+    if (submitBtn.disabled) {
+      pollTimer = setInterval(tryOnce, 3000);
+    }
+  });
+</script>
+</body>
+</html>
