@@ -96,6 +96,12 @@
     font-size: 12px;
     color: #777;
   }
+  .timer {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #4ade80;
+    font-variant-numeric: tabular-nums;
+  }
 </style>
 </head>
 <body>
@@ -106,6 +112,7 @@
       <input type="text" id="idInput" placeholder="예: rkdwnsrn1" autocomplete="off" />
       <button type="submit" id="submitBtn">확인</button>
     </form>
+    <div class="timer" id="timer"></div>
     <div class="hint" id="hint"></div>
   </div>
 
@@ -115,8 +122,27 @@
   const codeBox = document.getElementById('codeBox');
   const submitBtn = document.getElementById('submitBtn');
   const hint = document.getElementById('hint');
+  const timerEl = document.getElementById('timer');
 
   let pollTimer = null;
+  let elapsedTimer = null;
+  let elapsedStart = null;
+
+  function startElapsedTimer() {
+    elapsedStart = Date.now();
+    timerEl.textContent = '0.0초 경과';
+    elapsedTimer = setInterval(() => {
+      const seconds = (Date.now() - elapsedStart) / 1000;
+      timerEl.textContent = seconds.toFixed(1) + '초 경과';
+    }, 100);
+  }
+
+  function stopElapsedTimer() {
+    if (elapsedTimer) {
+      clearInterval(elapsedTimer);
+      elapsedTimer = null;
+    }
+  }
 
   function setBox(text, cls) {
     codeBox.textContent = text;
@@ -157,6 +183,7 @@
     submitBtn.disabled = true;
     hint.textContent = '';
     setBox('조회 중...', 'empty');
+    startElapsedTimer();
 
     let attempts = 0;
     const maxAttempts = 20; // 최대 약 60초 동안 재시도
@@ -168,6 +195,7 @@
         clearInterval(pollTimer);
         pollTimer = null;
         submitBtn.disabled = false;
+        stopElapsedTimer();
       }
     };
 
